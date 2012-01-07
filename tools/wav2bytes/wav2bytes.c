@@ -1,4 +1,24 @@
 /*
+ * Converts a Polar UpLink wav file to a file with the serial protocol byte
+ * stream.
+ *
+ * These files are of the following format and only this is supported:
+ * RIFF (little-endian) data, WAVE audio, Microsoft PCM, 8 bit, mono 44100 Hz
+ *
+ * Files exported from Polar UpLink Tool should work perfectly.
+ *
+ * Files recorded from playback may cause problems because of noise depending
+ * on the signal level. If the conversion goes wrong (CRC verification fails),
+ * you can tweak the noise tolerance or the minimum count of nonzerocount in
+ * the source. Also the conversion is not yet flexible: the file has to begin
+ * directly with the start bit. Trailing silence causes errors "start bit not
+ * logical 1", but the concerned bytes ignored, so this does not hurt.
+ *
+ * Copyright (C) 2012 Markus Heidelberg <markus.heidelberg@web.de>
+ *
+ * Based on examples/sndfile-to-text.c from libsndfile-1.0.25
+ *
+ *
 ** Copyright (C) 2008-2011 Erik de Castro Lopo <erikd@mega-nerd.com>
 **
 ** All rights reserved.
@@ -82,6 +102,8 @@ convert_to_text (SNDFILE * infile, FILE * outfile)
 {	int buf [BLOCK_SIZE] ;
 	int serialbit, k, readcount, nonzerocount ;
 	short serialframe, serialbyte;
+	int serialframecount = 0;
+	int serialframeerrors = 0;
 
 	unsigned short crc = 0;
 
@@ -91,32 +113,49 @@ convert_to_text (SNDFILE * infile, FILE * outfile)
 			nonzerocount = 0;
 			for (k = 0 ; k < readcount/11 ; k++) {
 				unsigned char sampleval = ((unsigned int)buf [serialbit * 441 + k] >> 24) ^ 0x80;
-				if (sampleval != 0x80) {
+				if (sampleval < 0x80-0x3 || sampleval > 0x80+0x3) {
 					if (k < readcount/11 / 2)
 						nonzerocount++;
 					else
-						fprintf (stderr, "error in RZ code: waveform should be silent (0x80), instead: 0x%02X\n", sampleval);
+						fprintf (stderr, "warning: RZ code in serial frame %2d bit %2d: "
+								"waveform should be silent (about 0x80 with tolerance), instead: 0x%02X\n",
+								serialframecount, serialbit, sampleval);
 				}
 				//fprintf (stderr, "%8u: %02x %d\n", serialbit * 441 + k, sampleval, nonzerocount);
 			}
 			if (nonzerocount > readcount/11 / 3)
 				serialframe |= (1 << serialbit);
 		}
-		if (!(serialframe & (1 << 0)))
-			fprintf (stderr, "error in serial frame: start bit not logical 1\n");
-		if ((serialframe & (1 << 9)))
-			fprintf (stderr, "error in serial frame: stop bit #1 not logical 0\n");
-		if ((serialframe & (1 << 10)))
-			fprintf (stderr, "error in serial frame: stop bit #2 not logical 0\n");
+		if (!(serialframe & (1 << 0))) {
+			serialframeerrors++;
+			fprintf (stderr, "error in serial frame %2d: start bit not logical 1\n", serialframecount);
+		}
+		if ((serialframe & (1 << 9))) {
+			serialframeerrors++;
+			fprintf (stderr, "error in serial frame %2d: stop bit #1 not logical 0\n", serialframecount);
+		}
+		if ((serialframe & (1 << 10))) {
+			serialframeerrors++;
+			fprintf (stderr, "error in serial frame %2d: stop bit #2 not logical 0\n", serialframecount);
+		}
 
 		// 8 bits payload, LSB first
 		serialbyte = (serialframe >> 1) & 0xFF;
-		// text file: one byte per line
-		fprintf (outfile, "%02X\n", serialbyte);
-		// binary file, file has to be opened binary to be portable
-		//fputc (serialbyte, outfile);
 
-		crc_process (&crc, serialbyte);
+		if (serialframeerrors == 0) {
+			// text file: one byte per line
+			fprintf (outfile, "%02X\n", serialbyte);
+			// binary file, file has to be opened binary to be portable
+			//fputc (serialbyte, outfile);
+
+			crc_process (&crc, serialbyte);
+		} else {
+			fprintf (stderr, "warning: byte with value 0x%02X of serial frame %2d ignored because of %d logical errors\n",
+					serialbyte, serialframecount, serialframeerrors);
+		}
+
+		serialframecount++;
+		serialframeerrors = 0;
 	}
 
 	if (crc != 0)
