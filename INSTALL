@@ -1,0 +1,15 @@
+Requirements
+============
+
+  - CMake >= 2.6
+    http://cmake.org/
+
+
+Build and install
+=================
+
+  mkdir build
+  cd build
+  cmake -DCMAKE_INSTALL_PREFIX:PATH=/usr ..
+  make
+  make install/strip
