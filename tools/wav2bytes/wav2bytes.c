@@ -60,6 +60,26 @@
 #define	BLOCK_SIZE (11*441) // 441 is the number of sample values per bit/symbol of the serial protocol
 			    // 11 is the number of bits per frame/byte of the serial protocol
 
+/*
+ * CRC source code unchanged from here:
+ *   Project: s710
+ *   URL: https://code.google.com/archive/p/s710/ (http://s710.googlecode.com/)
+ *   File: src/libs710/crc.c
+ *   Licensed under GPL v2
+ */
+
+/* >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>> */
+
+/* $Id: crc.c,v 1.1 2002/09/17 09:27:15 dave Exp $ */
+
+/* 
+   Thanks to Stefan Kleditzsch for decoding the checksum algorithm!
+*/
+
+/*
+ * crc16 checksum function with polynom=0x8005
+ */
+
 void crc_process
 ( unsigned short * context,
   unsigned char ch )
@@ -86,6 +106,8 @@ void crc_block
   while ( len -- > 0 )
     crc_process ( context, * blk ++ );
 }
+
+/* <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<< */
 
 static void
 print_usage (char *progname)
